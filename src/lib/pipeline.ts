@@ -4,7 +4,8 @@
  */
 import { searchKeyword } from "./kakao";
 import { nearestSegment, sideOfRoute, sampleRoute, offsetPoint, type Point, type Side } from "./geo";
-import stores from "@/data/stores.json";
+
+export type Category = "dt" | "gas" | "restroom";
 
 const MAX_BUFFER_M = 1000; // 최대 버퍼(수집 기준) — 사용자 설정은 이 이내에서 클라이언트 재필터링
 const CONCURRENCY = 5;
@@ -31,7 +32,7 @@ type Candidate = {
   y: number;
   distM: number; // 이탈 거리
   side: Side;
-  category?: "dt" | "gas" | "restroom";
+  category?: Category;
   approxExtraSec: number;
   score: number;
 };
@@ -102,31 +103,10 @@ function directionScore(side: Side): number {
   return 0.5; // UNKNOWN (SPEC §10-D3)
 }
 
-/**
- * 큐레이션 JSON 매칭 — 좌표 근접(≤100m)만으로 판정 (FS-5는 이름 유사도도 요구하지만
- * 데모 스토어 목록이 소규모라 좌표만으로 충분 — 실 데이터 규모 커지면 이름 유사도 추가).
- */
-function matchCategory(x: number, y: number): "dt" | "gas" | "restroom" | undefined {
-  for (const store of stores as Array<{ id: string; name: string; lat: number; lng: number; category: string }>) {
-    if (haversineApproxM(x, y, store.lng, store.lat) <= 100) {
-      return store.category as "dt" | "gas" | "restroom";
-    }
-  }
-  return undefined;
-}
-
-function haversineApproxM(x1: number, y1: number, x2: number, y2: number): number {
-  const M_PER_DEG_LAT = 110_540.0;
-  const M_PER_DEG_LON_EQ = 111_320.0;
-  const refY = (y1 + y2) / 2;
-  const dx = (x2 - x1) * M_PER_DEG_LON_EQ * Math.cos((refY * Math.PI) / 180);
-  const dy = (y2 - y1) * M_PER_DEG_LAT;
-  return Math.hypot(dx, dy);
-}
-
 export async function searchAlongRoute(
   vertexes: Point[],
   query: string,
+  category?: Category,
 ): Promise<Candidate[]> {
   const samples = sampleRoute(vertexes, 3000 * 1.7); // 기본 반경 3km 가정 (FS-2-1 간소화)
   const perSample = await mapConcurrent(samples, CONCURRENCY, (p) => searchCircle(query, p.x, p.y, 3000, 0));
@@ -159,7 +139,7 @@ export async function searchAlongRoute(
       y,
       distM: Math.round(distM),
       side,
-      category: matchCategory(x, y),
+      category,
       approxExtraSec: Math.round(extraSec),
       score,
     });

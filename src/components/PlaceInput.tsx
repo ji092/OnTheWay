@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { Place } from "@/lib/types";
 
 export default function PlaceInput({
@@ -18,9 +18,13 @@ export default function PlaceInput({
   const [open, setOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  // 부모가 value(선택된 장소)를 바꾸면 표시 텍스트도 맞춰준다 — 렌더 중 상태 조정
+  // (React 공식 패턴: https://react.dev/learn/you-might-not-need-an-effect)
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     setText(value?.name ?? "");
-  }, [value]);
+  }
 
   function handleChange(v: string) {
     setText(v);

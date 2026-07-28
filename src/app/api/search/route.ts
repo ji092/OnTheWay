@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cacheGet } from "@/lib/cache";
-import { searchAlongRoute } from "@/lib/pipeline";
+import { searchAlongRoute, type Category } from "@/lib/pipeline";
 import { KakaoApiError } from "@/lib/kakao";
 import type { Point } from "@/lib/geo";
 
-type Body = { routeId: string; query: string };
+type Body = { routeId: string; query: string; category?: Category };
 type CachedRoute = { vertexes: Point[]; durationSec: number; distanceM: number };
 
 export async function POST(req: NextRequest) {
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const candidates = await searchAlongRoute(route.vertexes, body.query);
+    const candidates = await searchAlongRoute(route.vertexes, body.query, body.category);
     return NextResponse.json({ candidates });
   } catch (err) {
     if (err instanceof KakaoApiError) {

@@ -12,8 +12,6 @@ export type Candidate = {
   score: number;
 };
 
-export type RouteResult = { routeId: string; vertexes: { x: number; y: number }[]; durationSec: number; distanceM: number };
-
 export type SortStyle = "distance" | "time" | "recommended";
 
 export const CATEGORY_LABEL: Record<"all" | "dt" | "gas" | "restroom", string> = {

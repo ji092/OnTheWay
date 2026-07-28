@@ -7,11 +7,15 @@ import { CATEGORY_LABEL, CATEGORY_QUERY, type Candidate, type Place, type SortSt
 type Category = "all" | "dt" | "gas" | "restroom";
 const DEVIATION_OPTIONS = [100, 300, 500] as const;
 
-async function fetchCandidates(routeId: string, query: string): Promise<Candidate[]> {
+async function fetchCandidates(
+  routeId: string,
+  query: string,
+  category: "dt" | "gas" | "restroom",
+): Promise<Candidate[]> {
   const res = await fetch("/api/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ routeId, query }),
+    body: JSON.stringify({ routeId, query, category }),
   });
   if (!res.ok) return [];
   const data = await res.json();
@@ -61,21 +65,21 @@ export default function StepResults({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setSelectedId(null);
     (async () => {
+      setLoading(true);
+      setSelectedId(null);
       let results: Candidate[];
       if (category === "all") {
         const lists = await Promise.all(
           (Object.keys(CATEGORY_QUERY) as (keyof typeof CATEGORY_QUERY)[]).map((c) =>
-            fetchCandidates(routeId, CATEGORY_QUERY[c]),
+            fetchCandidates(routeId, CATEGORY_QUERY[c], c),
           ),
         );
         const seen = new Map<string, Candidate>();
         for (const list of lists) for (const c of list) if (!seen.has(c.placeId)) seen.set(c.placeId, c);
         results = [...seen.values()];
       } else {
-        results = await fetchCandidates(routeId, CATEGORY_QUERY[category]);
+        results = await fetchCandidates(routeId, CATEGORY_QUERY[category], category);
       }
       if (!cancelled) {
         setCandidates(results);
@@ -101,22 +105,23 @@ export default function StepResults({
   const top3Key = top3.map((c) => c.placeId).join(",");
 
   useEffect(() => {
-    if (top3.length === 0) {
-      setPreciseTimes(new Map());
-      return;
-    }
     let cancelled = false;
-    setPrecisionLoading(true);
-    fetchExtraTime(
-      routeId,
-      top3.map((c) => ({ placeId: c.placeId, x: c.x, y: c.y })),
-    ).then((results) => {
+    (async () => {
+      if (top3.length === 0) {
+        setPreciseTimes(new Map());
+        return;
+      }
+      setPrecisionLoading(true);
+      const results = await fetchExtraTime(
+        routeId,
+        top3.map((c) => ({ placeId: c.placeId, x: c.x, y: c.y })),
+      );
       if (cancelled) return;
       const next = new Map<string, number | null>();
       for (const r of results) next.set(r.placeId, r.approx ? null : r.extraSec);
       setPreciseTimes(next);
       setPrecisionLoading(false);
-    });
+    })();
     return () => {
       cancelled = true;
     };

@@ -1,9 +1,0 @@
-[
-  { "id": "sb-001", "name": "스타벅스 신갈DT점", "lat": 37.2825, "lng": 127.1197, "category": "dt" },
-  { "id": "sb-002", "name": "스타벅스 죽전DT점", "lat": 37.3247, "lng": 127.1097, "category": "dt" },
-  { "id": "sb-003", "name": "스타벅스 판교DT점", "lat": 37.3947, "lng": 127.1112, "category": "dt" },
-  { "id": "gs-001", "name": "GS칼텍스 기흥주유소", "lat": 37.2751, "lng": 127.1156, "category": "gas" },
-  { "id": "gs-002", "name": "SK에너지 서판교주유소", "lat": 37.3891, "lng": 127.0987, "category": "gas" },
-  { "id": "wc-001", "name": "기흥휴게소 화장실", "lat": 37.2701, "lng": 127.1203, "category": "restroom" },
-  { "id": "wc-002", "name": "판교휴게소 화장실", "lat": 37.3902, "lng": 127.1055, "category": "restroom" }
-]
