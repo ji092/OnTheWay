@@ -110,13 +110,15 @@ a {
   border-radius: 14px;
   padding: 4px;
   display: flex;
-  flex-direction: column;
-}
-
-.placeRow {
-  display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.placeInputs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .placeInput {
@@ -129,7 +131,7 @@ a {
   border-bottom: 1px solid rgba(127, 127, 127, 0.15);
 }
 
-.placeRow .placeInput {
+.placeInputs .placeInput:last-child {
   border-bottom: none;
 }
 
@@ -192,6 +194,7 @@ a {
   color: inherit;
   cursor: pointer;
   flex-shrink: 0;
+  margin-right: 4px;
 }
 
 .primaryBtn {

@@ -54,13 +54,13 @@ export default function StepHome({
   return (
     <div className="screen">
       <div className="card">
-        <PlaceInput label="출발지" value={origin} onSelect={setOrigin} dotColor="#4f8ef7" />
-        <div className="placeRow">
+        <div className="placeInputs">
+          <PlaceInput label="출발지" value={origin} onSelect={setOrigin} dotColor="#4f8ef7" />
           <PlaceInput label="목적지" value={destination} onSelect={setDestination} dotColor="#222" />
-          <button className="swapBtn" onClick={swap} aria-label="출발지/목적지 바꾸기">
-            ↑↓
-          </button>
         </div>
+        <button className="swapBtn" onClick={swap} aria-label="출발지/목적지 바꾸기">
+          ↑↓
+        </button>
       </div>
 
       <button
