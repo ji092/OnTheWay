@@ -41,6 +41,25 @@ async function kakaoGet(
   return res.json();
 }
 
+/** 다중 경유지 API 전용 — GET이 아니라 POST + JSON body 필요 (단일 목적지 Directions와 다름). */
+async function kakaoPost(
+  kind: keyof typeof callCounts,
+  url: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  callCounts[kind]++;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new KakaoApiError(res.status, `${res.status} ${text.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
 /** 경로 기반 POI 수집용 — sort=distance 필수 (SPEC §10-D4). 지명 자동완성에는 쓰지 말 것. */
 export async function searchKeyword(query: string, x: number, y: number, radiusM: number, page = 1) {
   return kakaoGet("local", LOCAL_KEYWORD_URL, {
@@ -69,10 +88,10 @@ export async function directions(ox: number, oy: number, dx: number, dy: number)
 export async function waypointDirections(
   ox: number, oy: number, wx: number, wy: number, dx: number, dy: number,
 ) {
-  return kakaoGet("waypoints", WAYPOINTS_URL, {
-    origin: `${ox},${oy}`,
-    destination: `${dx},${dy}`,
-    waypoints: `${wx},${wy}`,
+  return kakaoPost("waypoints", WAYPOINTS_URL, {
+    origin: { x: String(ox), y: String(oy) },
+    destination: { x: String(dx), y: String(dy) },
+    waypoints: [{ name: "waypoint", x: wx, y: wy }],
   });
 }
 
@@ -111,4 +130,16 @@ export function extractVertexes(directionsResp: unknown): {
     durationSec: Math.round(route.summary.duration),
     distanceM: Math.round(route.summary.distance),
   };
+}
+
+/** 경유지 포함 길찾기 응답 → duration_sec. 경로 없음/실패 시 throw. */
+export function extractDuration(directionsResp: unknown): number {
+  const resp = directionsResp as {
+    routes?: Array<{ result_code: number; result_msg?: string; summary: { duration: number } }>;
+  };
+  const route = (resp.routes ?? [])[0];
+  if (!route || route.result_code !== 0) {
+    throw new Error(route?.result_msg ?? "no route");
+  }
+  return Math.round(route.summary.duration);
 }

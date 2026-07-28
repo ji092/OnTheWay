@@ -18,6 +18,24 @@ async function fetchCandidates(routeId: string, query: string): Promise<Candidat
   return data.candidates ?? [];
 }
 
+type ExtraTimeResult = { placeId: string; extraSec: number | null; approx: boolean };
+
+async function fetchExtraTime(
+  routeId: string,
+  pois: { placeId: string; x: number; y: number }[],
+): Promise<ExtraTimeResult[]> {
+  const res = await fetch("/api/extra-time", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ routeId, pois }),
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results ?? [];
+}
+
+const TOP_N_PRECISE = 3;
+
 export default function StepResults({
   routeId,
   origin,
@@ -38,6 +56,8 @@ export default function StepResults({
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [preciseTimes, setPreciseTimes] = useState<Map<string, number | null>>(new Map());
+  const [precisionLoading, setPrecisionLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +96,33 @@ export default function StepResults({
     else sorted.sort((a, b) => b.score - a.score);
     return sorted;
   }, [candidates, deviation, excludeUturn, sortStyle]);
+
+  const top3 = filtered.slice(0, TOP_N_PRECISE);
+  const top3Key = top3.map((c) => c.placeId).join(",");
+
+  useEffect(() => {
+    if (top3.length === 0) {
+      setPreciseTimes(new Map());
+      return;
+    }
+    let cancelled = false;
+    setPrecisionLoading(true);
+    fetchExtraTime(
+      routeId,
+      top3.map((c) => ({ placeId: c.placeId, x: c.x, y: c.y })),
+    ).then((results) => {
+      if (cancelled) return;
+      const next = new Map<string, number | null>();
+      for (const r of results) next.set(r.placeId, r.approx ? null : r.extraSec);
+      setPreciseTimes(next);
+      setPrecisionLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // top3Key(placeId 조합)가 바뀔 때만 재호출 — top3 배열 자체는 매 렌더 새 참조라 제외
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeId, top3Key]);
 
   const selected = filtered.find((c) => c.placeId === selectedId) ?? null;
 
@@ -142,14 +189,19 @@ export default function StepResults({
         {!loading && filtered.length === 0 && (
           <p className="emptyText">조건에 맞는 곳이 없어요 — 이탈 허용 거리를 늘려보세요</p>
         )}
-        {filtered.map((c) => (
-          <ResultCard
-            key={c.placeId}
-            candidate={c}
-            selected={c.placeId === selectedId}
-            onSelect={() => setSelectedId(c.placeId)}
-          />
-        ))}
+        {filtered.map((c, i) => {
+          const isTop3 = i < TOP_N_PRECISE;
+          return (
+            <ResultCard
+              key={c.placeId}
+              candidate={c}
+              selected={c.placeId === selectedId}
+              onSelect={() => setSelectedId(c.placeId)}
+              preciseExtraSec={isTop3 ? preciseTimes.get(c.placeId) : undefined}
+              precisionLoading={isTop3 && precisionLoading && !preciseTimes.has(c.placeId)}
+            />
+          );
+        })}
       </div>
 
       <button className="primaryBtn stickyBtn" disabled={!selected} onClick={handleNavigate}>
