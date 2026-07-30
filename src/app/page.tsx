@@ -59,6 +59,15 @@ export default function Home() {
           destination={step.destination}
           sortStyle={step.sortStyle}
           onNewSearch={() => setStep({ name: "home" })}
+          onBackToStyle={() =>
+            setStep({
+              name: "style",
+              origin: step.origin,
+              destination: step.destination,
+              routeId: step.routeId,
+              vertexes: step.vertexes,
+            })
+          }
         />
       )}
       <footer className="footer">네이버맵 연동 · 경로 기반 경유지 탐색</footer>

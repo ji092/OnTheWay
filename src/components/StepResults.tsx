@@ -46,12 +46,14 @@ export default function StepResults({
   destination,
   sortStyle,
   onNewSearch,
+  onBackToStyle,
 }: {
   routeId: string;
   origin: Place;
   destination: Place;
   sortStyle: SortStyle;
   onNewSearch: () => void;
+  onBackToStyle: () => void;
 }) {
   const [category, setCategory] = useState<Category>("all");
   const [deviation, setDeviation] = useState<number>(500);
@@ -145,6 +147,9 @@ export default function StepResults({
   return (
     <div className="screen resultsScreen">
       <div className="resultsHeader">
+        <button className="linkBtn" onClick={onBackToStyle}>
+          ← 뒤로
+        </button>
         <span className="routeLabel">
           📍 {origin.name} → {destination.name}
         </span>
@@ -192,7 +197,12 @@ export default function StepResults({
       <div className="resultsList">
         {loading && <p className="loadingText">검색 중…</p>}
         {!loading && filtered.length === 0 && (
-          <p className="emptyText">조건에 맞는 곳이 없어요 — 이탈 허용 거리를 늘려보세요</p>
+          <div className="emptyState">
+            <p className="emptyText">조건에 맞는 곳이 없어요 — 이탈 허용 거리를 늘리거나 다른 경로 방식을 선택해보세요</p>
+            <button className="secondaryBtn" onClick={onBackToStyle}>
+              경로 다시 선택하기
+            </button>
+          </div>
         )}
         {filtered.map((c, i) => {
           const isTop3 = i < TOP_N_PRECISE;
