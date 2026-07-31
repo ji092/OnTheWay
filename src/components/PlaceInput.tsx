@@ -34,10 +34,19 @@ export default function PlaceInput({
       return;
     }
     debounceRef.current = setTimeout(async () => {
-      const res = await fetch(`/api/place-search?q=${encodeURIComponent(v)}`);
-      const data = await res.json();
-      setOptions(data.places ?? []);
-      setOpen(true);
+      try {
+        const res = await fetch(`/api/place-search?q=${encodeURIComponent(v)}`);
+        if (!res.ok) throw new Error(`place-search ${res.status}`);
+        const data = await res.json();
+        setOptions(data.places ?? []);
+        setOpen(true);
+      } catch (err) {
+        // 자동완성은 보조 기능이라 화면을 막지 않는다 — 직접 입력은 계속 가능해야 하므로
+        // 드롭다운만 닫고 콘솔에 남긴다(원인 없이 조용히 사라지는 것만 방지).
+        console.warn("[place-search] 자동완성 실패", err);
+        setOptions([]);
+        setOpen(false);
+      }
     }, 300);
   }
 

@@ -1,15 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { waypointDirections, extractDuration } from "@/lib/kakao";
-import { cacheGet } from "@/lib/cache";
-import type { Point } from "@/lib/geo";
+import { waypointDirections, extractSummary } from "@/lib/kakao";
+import {
+  checkRateLimit,
+  RATE_LIMITED_BODY,
+  RATE_LIMITED_STATUS,
+} from "@/lib/rateLimit";
+import {
+  getCachedRoute,
+  ROUTE_EXPIRED_BODY,
+  ROUTE_EXPIRED_STATUS,
+} from "@/lib/routeCache";
 
 type Poi = { placeId: string; x: number; y: number };
 type Body = { routeId: string; pois: Poi[] };
-type CachedRoute = { vertexes: Point[]; durationSec: number; distanceM: number };
 
 const MAX_POIS = 3;
 
 export async function POST(req: NextRequest) {
+  const rate = checkRateLimit(req, "extraTime");
+  if (!rate.ok) {
+    return NextResponse.json(RATE_LIMITED_BODY, {
+      status: RATE_LIMITED_STATUS,
+      headers: { "Retry-After": String(rate.retryAfterSec) },
+    });
+  }
+
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body?.routeId || !Array.isArray(body.pois) || body.pois.length === 0) {
     return NextResponse.json(
@@ -18,12 +33,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const route = cacheGet<CachedRoute>(body.routeId);
+  const route = getCachedRoute(body.routeId);
   if (!route || route.vertexes.length < 2) {
-    return NextResponse.json(
-      { error: "E-204", message: "경로 정보가 만료되었습니다. /api/route를 다시 호출하세요." },
-      { status: 410 },
-    );
+    return NextResponse.json(ROUTE_EXPIRED_BODY, { status: ROUTE_EXPIRED_STATUS });
   }
 
   const origin = route.vertexes[0];
@@ -36,12 +48,18 @@ export async function POST(req: NextRequest) {
         const resp = await waypointDirections(
           origin.x, origin.y, poi.x, poi.y, destination.x, destination.y,
         );
-        const detourDuration = extractDuration(resp);
-        const extraSec = Math.max(0, detourDuration - route.durationSec);
-        return { placeId: poi.placeId, extraSec, approx: false };
+        const detour = extractSummary(resp);
+        return {
+          placeId: poi.placeId,
+          extraSec: Math.max(0, detour.durationSec - route.durationSec),
+          extraDistM: Math.max(0, detour.distanceM - route.distanceM),
+          approx: false,
+        };
       } catch {
-        // 실패 시 근사치 유지 플래그만 세우고 나머지는 프론트가 기존 approxExtraSec 사용 (FS-4)
-        return { placeId: poi.placeId, extraSec: null, approx: true };
+        // 실패 시 근사치 유지 플래그만 세우고 나머지는 프론트가 기존 근사값 사용 (FS-4).
+        // 일일 예산 초과(QuotaExceededError)도 여기로 흡수된다 — 정밀 시간은 보조
+        // 기능이라 화면을 막는 것보다 근사치로 계속 보여주는 편이 낫다.
+        return { placeId: poi.placeId, extraSec: null, extraDistM: null, approx: true };
       }
     }),
   );
