@@ -4,19 +4,17 @@ import Header from "@/components/Header";
 import StepHome from "@/components/StepHome";
 import StepStyle from "@/components/StepStyle";
 import StepResults from "@/components/StepResults";
-import type { Place, SortStyle } from "@/lib/types";
-
-type Vertex = { x: number; y: number };
+import type { Place, Point, SortStyle } from "@/lib/types";
 
 type Step =
   | { name: "home" }
-  | { name: "style"; origin: Place; destination: Place; routeId: string; vertexes: Vertex[] }
+  | { name: "style"; origin: Place; destination: Place; routeId: string; vertexes: Point[] }
   | {
       name: "results";
       origin: Place;
       destination: Place;
       routeId: string;
-      vertexes: Vertex[];
+      vertexes: Point[];
       sortStyle: SortStyle;
     };
 
@@ -77,7 +75,7 @@ export default function Home() {
 
 function stepLabel(step: Step): string {
   if (step.name === "results") {
-    return { distance: "거리 우선", time: "시간 우선", recommended: "추천 경로" }[step.sortStyle];
+    return { distance: "최소 거리", time: "최단 시간", recommended: "추천 경로" }[step.sortStyle];
   }
   return "";
 }

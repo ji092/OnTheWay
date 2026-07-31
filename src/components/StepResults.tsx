@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ResultCard from "./ResultCard";
 import { launchNaverNavigation } from "@/lib/naver";
 import { CATEGORY_LABEL, CATEGORY_QUERY, type Candidate, type Place, type SortStyle } from "@/lib/types";
@@ -7,6 +7,7 @@ import { CATEGORY_LABEL, CATEGORY_QUERY, type Candidate, type Place, type SortSt
 type Category = "all" | "dt" | "gas" | "restroom";
 const DEVIATION_OPTIONS = [100, 300, 500] as const;
 
+/** 실패 시 서버가 준 메시지를 그대로 담아 throw — 빈 결과와 에러를 구분하기 위함 */
 async function fetchCandidates(
   routeId: string,
   query: string,
@@ -17,25 +18,43 @@ async function fetchCandidates(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ routeId, query, category }),
   });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.candidates ?? [];
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.message ?? "검색 중 오류가 발생했습니다");
+  }
+  return data?.candidates ?? [];
 }
 
-type ExtraTimeResult = { placeId: string; extraSec: number | null; approx: boolean };
+type ExtraTimeResult = {
+  placeId: string;
+  extraSec: number | null;
+  extraDistM: number | null;
+  approx: boolean;
+};
 
+/** 정밀 계산이 성공한 후보만 담는다 — 실패분은 근사치를 그대로 쓰게 비워둔다. */
+type PreciseExtra = { extraSec: number; extraDistM: number };
+
+/**
+ * 정밀 시간은 실패해도 근사치로 대체하면 되는 보조 기능(FS-4)이라 여기서는
+ * throw하지 않고 빈 배열로 안전하게 폴백 — 네트워크 오류로 화면이 멈추는 것만 방지.
+ */
 async function fetchExtraTime(
   routeId: string,
   pois: { placeId: string; x: number; y: number }[],
 ): Promise<ExtraTimeResult[]> {
-  const res = await fetch("/api/extra-time", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ routeId, pois }),
-  });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.results ?? [];
+  try {
+    const res = await fetch("/api/extra-time", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ routeId, pois }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.results ?? [];
+  } catch {
+    return [];
+  }
 }
 
 const TOP_N_PRECISE = 3;
@@ -60,38 +79,83 @@ export default function StepResults({
   const [excludeUturn, setExcludeUturn] = useState(true);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
-  const [preciseTimes, setPreciseTimes] = useState<Map<string, number | null>>(new Map());
+  const [precise, setPrecise] = useState<Map<string, PreciseExtra>>(new Map());
   const [precisionLoading, setPrecisionLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+
+  // 탭을 오갈 때마다 같은 검색을 반복하지 않도록 카테고리별 결과를 들고 있는다.
+  // "전체"는 카테고리별 응답을 각각 받아오므로, 그때 개별 탭 몫까지 같이 채워둔다.
+  // 경로가 바뀌거나 사용자가 "다시 시도"를 누르면(retryCount) 통째로 버린다.
+  const cacheRef = useRef({ routeKey: "", byCategory: new Map<Category, Candidate[]>() });
 
   useEffect(() => {
     let cancelled = false;
+
+    const routeKey = `${routeId}:${retryCount}`;
+    if (cacheRef.current.routeKey !== routeKey) {
+      cacheRef.current = { routeKey, byCategory: new Map() };
+    }
+    const cache = cacheRef.current.byCategory;
+
+    const cachedResults = cache.get(category);
+    if (cachedResults) {
+      setCandidates(cachedResults);
+      setSearchError(null);
+      setSelectedId(null);
+      setLoading(false);
+      return;
+    }
+
     (async () => {
       setLoading(true);
+      setSearchError(null);
       setSelectedId(null);
-      let results: Candidate[];
-      if (category === "all") {
-        const lists = await Promise.all(
-          (Object.keys(CATEGORY_QUERY) as (keyof typeof CATEGORY_QUERY)[]).map((c) =>
-            fetchCandidates(routeId, CATEGORY_QUERY[c], c),
-          ),
-        );
-        const seen = new Map<string, Candidate>();
-        for (const list of lists) for (const c of list) if (!seen.has(c.placeId)) seen.set(c.placeId, c);
-        results = [...seen.values()];
-      } else {
-        results = await fetchCandidates(routeId, CATEGORY_QUERY[category], category);
-      }
-      if (!cancelled) {
-        setCandidates(results);
-        setLoading(false);
+      try {
+        let results: Candidate[];
+        if (category === "all") {
+          const categories = Object.keys(CATEGORY_QUERY) as (keyof typeof CATEGORY_QUERY)[];
+          const settled = await Promise.allSettled(
+            categories.map((c) => fetchCandidates(routeId, CATEGORY_QUERY[c], c)),
+          );
+          const fulfilled = settled.filter(
+            (s): s is PromiseFulfilledResult<Candidate[]> => s.status === "fulfilled",
+          );
+          if (fulfilled.length === 0) {
+            const rejected = settled.find((s) => s.status === "rejected") as
+              | PromiseRejectedResult
+              | undefined;
+            throw rejected?.reason ?? new Error("검색 중 오류가 발생했습니다");
+          }
+          const seen = new Map<string, Candidate>();
+          settled.forEach((result, i) => {
+            if (result.status !== "fulfilled") return;
+            cache.set(categories[i], result.value);
+            for (const c of result.value) if (!seen.has(c.placeId)) seen.set(c.placeId, c);
+          });
+          results = [...seen.values()];
+        } else {
+          results = await fetchCandidates(routeId, CATEGORY_QUERY[category], category);
+        }
+        if (!cancelled) {
+          cache.set(category, results);
+          setCandidates(results);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCandidates([]);
+          setSearchError(err instanceof Error ? err.message : "검색 중 오류가 발생했습니다");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [routeId, category]);
+  }, [routeId, category, retryCount]);
 
   const filtered = useMemo(() => {
     let list = candidates.filter((c) => c.distM <= deviation);
@@ -110,7 +174,7 @@ export default function StepResults({
     let cancelled = false;
     (async () => {
       if (top3.length === 0) {
-        setPreciseTimes(new Map());
+        setPrecise(new Map());
         return;
       }
       setPrecisionLoading(true);
@@ -119,9 +183,12 @@ export default function StepResults({
         top3.map((c) => ({ placeId: c.placeId, x: c.x, y: c.y })),
       );
       if (cancelled) return;
-      const next = new Map<string, number | null>();
-      for (const r of results) next.set(r.placeId, r.approx ? null : r.extraSec);
-      setPreciseTimes(next);
+      const next = new Map<string, PreciseExtra>();
+      for (const r of results) {
+        if (r.approx || r.extraSec === null || r.extraDistM === null) continue;
+        next.set(r.placeId, { extraSec: r.extraSec, extraDistM: r.extraDistM });
+      }
+      setPrecise(next);
       setPrecisionLoading(false);
     })();
     return () => {
@@ -196,7 +263,20 @@ export default function StepResults({
       <div className="resultsListHeader">경유지 추천 {filtered.length}곳</div>
       <div className="resultsList">
         {loading && <p className="loadingText">검색 중…</p>}
-        {!loading && filtered.length === 0 && (
+        {!loading && searchError && (
+          <div className="emptyState">
+            <p className="errorText">{searchError}</p>
+            <div className="chipRow">
+              <button className="secondaryBtn" onClick={() => setRetryCount((n) => n + 1)}>
+                다시 시도
+              </button>
+              <button className="secondaryBtn" onClick={onNewSearch}>
+                새 검색
+              </button>
+            </div>
+          </div>
+        )}
+        {!loading && !searchError && filtered.length === 0 && (
           <div className="emptyState">
             <p className="emptyText">조건에 맞는 곳이 없어요 — 이탈 허용 거리를 늘리거나 다른 경로 방식을 선택해보세요</p>
             <button className="secondaryBtn" onClick={onBackToStyle}>
@@ -212,8 +292,9 @@ export default function StepResults({
               candidate={c}
               selected={c.placeId === selectedId}
               onSelect={() => setSelectedId(c.placeId)}
-              preciseExtraSec={isTop3 ? preciseTimes.get(c.placeId) : undefined}
-              precisionLoading={isTop3 && precisionLoading && !preciseTimes.has(c.placeId)}
+              sortStyle={sortStyle}
+              precise={isTop3 ? precise.get(c.placeId) : undefined}
+              precisionLoading={isTop3 && precisionLoading && !precise.has(c.placeId)}
             />
           );
         })}
