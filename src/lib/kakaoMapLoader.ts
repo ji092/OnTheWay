@@ -17,6 +17,15 @@ type KakaoMaps = {
       strokeOpacity: number;
       map?: unknown;
     }) => { setMap: (map: unknown | null) => void };
+    // 마커 색상 구분용 — 기본 Marker는 색을 바꿀 수 없어 HTML 핀을 직접 얹는다.
+    CustomOverlay?: new (opts: {
+      position: unknown;
+      content: HTMLElement | string;
+      yAnchor?: number;
+      xAnchor?: number;
+      zIndex?: number;
+      map?: unknown;
+    }) => { setMap: (map: unknown | null) => void };
     LatLngBounds: new () => { extend: (latlng: unknown) => void };
   };
 };
@@ -29,11 +38,14 @@ declare global {
 
 let loadPromise: Promise<KakaoMaps> | null = null;
 
-/** 카카오맵 JS SDK를 1회만 로드(중복 호출 안전). NEXT_PUBLIC_KAKAO_JS_KEY 필요. */
+/**
+ * 카카오맵 JS SDK를 1회만 로드(중복 호출 안전). NEXT_PUBLIC_KAKAO_JS_KEY 필요.
+ * 실패(reject)한 프로미스는 캐싱하지 않음 — 다음 호출에서 재시도 가능하도록.
+ */
 export function loadKakaoMaps(): Promise<KakaoMaps> {
   if (loadPromise) return loadPromise;
 
-  loadPromise = new Promise((resolve, reject) => {
+  const promise = new Promise<KakaoMaps>((resolve, reject) => {
     if (window.kakao?.maps) {
       resolve(window.kakao);
       return;
@@ -53,5 +65,10 @@ export function loadKakaoMaps(): Promise<KakaoMaps> {
     document.head.appendChild(script);
   });
 
-  return loadPromise;
+  promise.catch(() => {
+    loadPromise = null; // 실패 시 캐시 무효화 — 다음 호출이 새로 시도하게
+  });
+
+  loadPromise = promise;
+  return promise;
 }
