@@ -1,11 +1,13 @@
 /**
  * 경로 기반 POI 검색 파이프라인 (FS-2~FS-5, 00_SPEC 반영).
- * DB 없음 — 전부 인메모리. 카카오 POI는 응답 스코프 밖에 저장하지 않는다.
+ * DB 없음 — 영속 저장 일절 없음. 결과는 routeCache의 단기 TTL 인메모리 캐시까지만
+ * 재사용한다(카카오 유래 응답에 한해 SPEC §10-D1이 허용하는 범위).
  */
 import { searchKeyword } from "./kakao";
-import { nearestSegment, sideOfRoute, sampleRoute, offsetPoint, type Point, type Side } from "./geo";
+import { nearestSegment, sideOfRoute, sampleRoute, offsetPoint, type Point } from "./geo";
+import type { Candidate, Category, Side } from "./types";
 
-export type Category = "dt" | "gas" | "restroom";
+export type { Category };
 
 const MAX_BUFFER_M = 1000; // 최대 버퍼(수집 기준) — 사용자 설정은 이 이내에서 클라이언트 재필터링
 const CONCURRENCY = 5;
@@ -23,18 +25,6 @@ type KakaoDoc = {
 type KakaoSearchResp = {
   documents: KakaoDoc[];
   meta: { total_count: number; pageable_count: number; is_end: boolean };
-};
-
-type Candidate = {
-  placeId: string;
-  name: string;
-  x: number;
-  y: number;
-  distM: number; // 이탈 거리
-  side: Side;
-  category?: Category;
-  approxExtraSec: number;
-  score: number;
 };
 
 async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -97,6 +87,11 @@ function approxExtraSec(distM: number): number {
   return (distM * 2) / V_LOCAL_MPS + STOP_PENALTY_SEC;
 }
 
+/** 경로를 벗어났다 돌아오는 왕복분 — 정밀치(/api/extra-time)를 받기 전까지 쓰는 근사. */
+function approxExtraDistM(distM: number): number {
+  return distM * 2;
+}
+
 function directionScore(side: Side): number {
   if (side === "SAME") return 1.0;
   if (side === "OPPOSITE") return 0.0;
@@ -141,6 +136,7 @@ export async function searchAlongRoute(
       side,
       category,
       approxExtraSec: Math.round(extraSec),
+      approxExtraDistM: Math.round(approxExtraDistM(distM)),
       score,
     });
   }

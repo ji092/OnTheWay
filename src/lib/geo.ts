@@ -2,21 +2,24 @@
  * 지오 연산 — 로컬 평면 근사 기반 (Python src/backend/app/geo.py 참고 이식, 검증 후 신뢰).
  *
  * 위경도를 기준 위도의 미터 스케일로 변환해 평면 벡터로 다룬다.
- * 수백 m~수 km 스케일에서 오차 미미. 전국 단위 정밀도가 필요하면 turf.js의
- * 측지선 거리 계산(@turf/distance 등)으로 교체 검토.
+ * 수백 m~수 km 스케일에서 오차 미미. 전국 단위 정밀도가 필요하면 측지선 거리
+ * 계산(@turf/distance 등)의 도입을 검토.  ※ 현재 turf 의존성은 없음.
  * 좌표 표기: (x=경도, y=위도) — 카카오 API와 동일.
  */
+
+import type { Point, Side } from "./types";
+
+// 좌표/방향 타입의 정의는 types.ts 하나 — 여기서는 기존 import 경로 유지를 위해 재수출만 한다.
+export type { Point, Side };
 
 const M_PER_DEG_LAT = 110_540.0;
 const M_PER_DEG_LON_EQ = 111_320.0;
 
-export type Point = { x: number; y: number };
-
-export function toPlane(x: number, y: number, refY: number): [number, number] {
+function toPlane(x: number, y: number, refY: number): [number, number] {
   return [x * M_PER_DEG_LON_EQ * Math.cos((refY * Math.PI) / 180), y * M_PER_DEG_LAT];
 }
 
-export function pointSegDistM(
+function pointSegDistM(
   px: number, py: number,
   ax: number, ay: number,
   bx: number, by: number,
@@ -46,8 +49,6 @@ export function nearestSegment(vertexes: Point[], px: number, py: number): { dis
   }
   return { distM: bestD, segIdx: bestI };
 }
-
-export type Side = "SAME" | "OPPOSITE" | "UNKNOWN";
 
 /**
  * 진행 방향 기준 좌/우 판별. 부호 규약 (SPEC §10-D2):

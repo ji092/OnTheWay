@@ -2,7 +2,7 @@
 import { useState } from "react";
 import PlaceInput from "./PlaceInput";
 import KakaoMap from "./KakaoMap";
-import type { Place } from "@/lib/types";
+import type { Place, Point } from "@/lib/types";
 
 export default function StepHome({
   onRouteFound,
@@ -11,7 +11,7 @@ export default function StepHome({
     origin: Place,
     destination: Place,
     routeId: string,
-    vertexes: { x: number; y: number }[],
+    vertexes: Point[],
   ) => void;
 }) {
   const [origin, setOrigin] = useState<Place | null>(null);
