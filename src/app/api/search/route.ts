@@ -5,7 +5,8 @@ import {
   RATE_LIMITED_STATUS,
 } from "@/lib/rateLimit";
 import { QuotaExceededError, QUOTA_EXCEEDED_BODY, QUOTA_EXCEEDED_STATUS } from "@/lib/quota";
-import { searchAlongRoute, type Category } from "@/lib/pipeline";
+import { searchAlongRoute, searchPremiumGasAlongRoute, type Category } from "@/lib/pipeline";
+import { OpinetApiError } from "@/lib/opinet";
 import { KakaoApiError } from "@/lib/kakao";
 import {
   getCachedRoute,
@@ -46,14 +47,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const candidates = await searchAlongRoute(route.vertexes, body.query, body.category);
+    // 고급유만 출처가 다르다 — 카카오는 고급휘발유 취급 여부를 모른다.
+    const candidates =
+      body.category === "gasPremium"
+        ? await searchPremiumGasAlongRoute(route.vertexes)
+        : await searchAlongRoute(route.vertexes, body.query, body.category);
     setCachedSearch(body.routeId, body.query, candidates);
     return NextResponse.json({ candidates });
   } catch (err) {
     if (err instanceof QuotaExceededError) {
       return NextResponse.json(QUOTA_EXCEEDED_BODY, { status: QUOTA_EXCEEDED_STATUS });
     }
-    if (err instanceof KakaoApiError) {
+    if (err instanceof KakaoApiError || err instanceof OpinetApiError) {
       return NextResponse.json(
         { error: "E-203", message: "일시적으로 검색이 원활하지 않습니다" },
         { status: 502 },

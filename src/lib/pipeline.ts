@@ -6,6 +6,7 @@
 import { searchKeyword } from "./kakao";
 import { nearestSegment, sideOfRoute, sampleRoute, offsetPoint, type Point } from "./geo";
 import type { Candidate, Category, Side } from "./types";
+import { stationsAround, PRODUCT, MAX_RADIUS_M, type Station } from "./opinet";
 
 export type { Category };
 
@@ -115,30 +116,87 @@ export async function searchAlongRoute(
 
   const candidates: Candidate[] = [];
   for (const doc of seen.values()) {
-    const x = parseFloat(doc.x);
-    const y = parseFloat(doc.y);
-    const { distM, segIdx } = nearestSegment(vertexes, x, y);
-    if (distM > MAX_BUFFER_M) continue;
-
-    const side = sideOfRoute(vertexes, segIdx, x, y);
-    const extraSec = approxExtraSec(distM);
-    const timeScore = 1 - Math.min(extraSec / 60 / 10, 1);
-    const distScore = 1 - Math.min(distM / 500, 1);
-    const dirScore = directionScore(side);
-    const score = Math.round(100 * (0.5 * timeScore + 0.2 * distScore + 0.3 * dirScore)); // SPEC §10-D3
-
-    candidates.push({
+    const candidate = buildCandidate(vertexes, {
       placeId: doc.id,
       name: doc.place_name,
-      x,
-      y,
-      distM: Math.round(distM),
-      side,
+      x: parseFloat(doc.x),
+      y: parseFloat(doc.y),
       category,
-      approxExtraSec: Math.round(extraSec),
-      approxExtraDistM: Math.round(approxExtraDistM(distM)),
-      score,
     });
+    if (candidate) candidates.push(candidate);
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates;
+}
+
+type PoiInput = {
+  placeId: string;
+  name: string;
+  x: number;
+  y: number;
+  category?: Category;
+  price?: number;
+};
+
+/**
+ * POI 한 건을 경로 기준으로 평가해 후보로 만든다. 버퍼 밖이면 null.
+ * 카카오/오피넷 어느 출처든 같은 기준으로 점수가 매겨져야 하므로 여기 하나만 쓴다.
+ */
+function buildCandidate(vertexes: Point[], poi: PoiInput): Candidate | null {
+  const { distM, segIdx } = nearestSegment(vertexes, poi.x, poi.y);
+  if (distM > MAX_BUFFER_M) return null;
+
+  const side = sideOfRoute(vertexes, segIdx, poi.x, poi.y);
+  const extraSec = approxExtraSec(distM);
+  const timeScore = 1 - Math.min(extraSec / 60 / 10, 1);
+  const distScore = 1 - Math.min(distM / 500, 1);
+  const dirScore = directionScore(side);
+  const score = Math.round(100 * (0.5 * timeScore + 0.2 * distScore + 0.3 * dirScore)); // SPEC §10-D3
+
+  return {
+    placeId: poi.placeId,
+    name: poi.name,
+    x: poi.x,
+    y: poi.y,
+    distM: Math.round(distM),
+    side,
+    category: poi.category,
+    approxExtraSec: Math.round(extraSec),
+    approxExtraDistM: Math.round(approxExtraDistM(distM)),
+    ...(poi.price ? { price: poi.price } : {}),
+    score,
+  };
+}
+
+/**
+ * 고급휘발유 취급 주유소 — 카카오가 아니라 오피넷에서 수집한다(FS-2 변형).
+ * 오피넷 반경 상한이 5km라 카카오(3km)보다 샘플 간격이 넓어 호출 수도 적다.
+ */
+export async function searchPremiumGasAlongRoute(vertexes: Point[]): Promise<Candidate[]> {
+  const samples = sampleRoute(vertexes, MAX_RADIUS_M * 1.7);
+  const perSample = await mapConcurrent(samples, CONCURRENCY, (p) =>
+    stationsAround(p, MAX_RADIUS_M, PRODUCT.premiumGasoline),
+  );
+
+  const seen = new Map<string, Station>();
+  for (const stations of perSample) {
+    for (const station of stations) {
+      if (!seen.has(station.id)) seen.set(station.id, station);
+    }
+  }
+
+  const candidates: Candidate[] = [];
+  for (const station of seen.values()) {
+    const candidate = buildCandidate(vertexes, {
+      placeId: `opinet:${station.id}`,
+      name: station.name,
+      x: station.x,
+      y: station.y,
+      category: "gasPremium",
+      price: station.price,
+    });
+    if (candidate) candidates.push(candidate);
   }
 
   candidates.sort((a, b) => b.score - a.score);

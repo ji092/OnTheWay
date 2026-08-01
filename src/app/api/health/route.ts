@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { callCounts } from "@/lib/kakao";
-import { quotaStatus } from "@/lib/quota";
+import { cacheSize } from "@/lib/cache";
+import { opinetQuotaStatus, quotaStatus } from "@/lib/quota";
+import { callCount as opinetCalls } from "@/lib/opinet";
 
 export async function GET() {
-  return NextResponse.json({ status: "ok", kakaoCalls: callCounts, quota: quotaStatus() });
+  return NextResponse.json({
+    status: "ok",
+    cacheSize: cacheSize(),
+    kakaoCalls: callCounts,
+    quota: quotaStatus(),
+    opinetCalls,
+    opinetQuota: opinetQuotaStatus(),
+  });
 }

@@ -2,16 +2,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ResultCard from "./ResultCard";
 import { launchNaverNavigation } from "@/lib/naver";
-import { CATEGORY_LABEL, CATEGORY_QUERY, type Candidate, type Place, type SortStyle } from "@/lib/types";
+import {
+  CATEGORY_LABEL,
+  CATEGORY_QUERY,
+  type Candidate,
+  type Category,
+  type Place,
+  type SortStyle,
+} from "@/lib/types";
 
-type Category = "all" | "dt" | "gas" | "restroom";
+/** 칩에는 실제 카테고리 외에 "전체"가 하나 더 있다. */
+type CategoryFilter = "all" | Category;
 const DEVIATION_OPTIONS = [100, 300, 500] as const;
 
 /** 실패 시 서버가 준 메시지를 그대로 담아 throw — 빈 결과와 에러를 구분하기 위함 */
 async function fetchCandidates(
   routeId: string,
   query: string,
-  category: "dt" | "gas" | "restroom",
+  category: Category,
 ): Promise<Candidate[]> {
   const res = await fetch("/api/search", {
     method: "POST",
@@ -74,7 +82,7 @@ export default function StepResults({
   onNewSearch: () => void;
   onBackToStyle: () => void;
 }) {
-  const [category, setCategory] = useState<Category>("all");
+  const [category, setCategory] = useState<CategoryFilter>("all");
   const [deviation, setDeviation] = useState<number>(500);
   const [excludeUturn, setExcludeUturn] = useState(true);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -89,7 +97,7 @@ export default function StepResults({
   // 탭을 오갈 때마다 같은 검색을 반복하지 않도록 카테고리별 결과를 들고 있는다.
   // "전체"는 카테고리별 응답을 각각 받아오므로, 그때 개별 탭 몫까지 같이 채워둔다.
   // 경로가 바뀌거나 사용자가 "다시 시도"를 누르면(retryCount) 통째로 버린다.
-  const cacheRef = useRef({ routeKey: "", byCategory: new Map<Category, Candidate[]>() });
+  const cacheRef = useRef({ routeKey: "", byCategory: new Map<CategoryFilter, Candidate[]>() });
 
   useEffect(() => {
     let cancelled = false;
@@ -226,7 +234,7 @@ export default function StepResults({
       </div>
 
       <div className="chipRow">
-        {(Object.keys(CATEGORY_LABEL) as Category[]).map((c) => (
+        {(Object.keys(CATEGORY_LABEL) as CategoryFilter[]).map((c) => (
           <button
             key={c}
             className={`chip${category === c ? " chipActive" : ""}`}
@@ -301,11 +309,11 @@ export default function StepResults({
       </div>
 
       <button className="primaryBtn stickyBtn" disabled={!selected} onClick={handleNavigate}>
-        ➤ 네이버맵으로 경유지 추가 안내
+        네이버맵으로 경유지 추가 안내 →
       </button>
       <p className="naverNote">네이버맵 앱이 설치되어 있어야 합니다</p>
 
-      {showToast && <div className="toast">✓ 네이버맵 앱이 열립니다</div>}
+      {showToast && <div className="toast">네이버맵 앱이 열립니다</div>}
     </div>
   );
 }
