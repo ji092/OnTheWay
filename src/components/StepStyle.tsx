@@ -11,11 +11,12 @@ type Option = {
 };
 
 const OPTIONS: Option[] = [
-  { value: "recommended", icon: "👍", title: "추천 경로", desc: "이탈거리·시간·방향을 종합 고려한 추천" },
-  { value: "distance", icon: "↝", title: "최소 거리", desc: "추가 주행거리가 가장 적은 순서로 정렬" },
-  { value: "time", icon: "⏱", title: "최단 시간", desc: "추가 소요시간이 가장 적은 순서로 정렬" },
+  // 아이콘은 그림문자 대신 그 방식이 무엇으로 정렬하는지를 나타내는 기호/단위.
+  { value: "recommended", icon: "★", title: "추천 경로", desc: "이탈거리·시간·방향을 종합 고려한 추천" },
+  { value: "distance", icon: "m", title: "최소 거리", desc: "추가 주행거리가 가장 적은 순서로 정렬" },
+  { value: "time", icon: "분", title: "최단 시간", desc: "추가 소요시간이 가장 적은 순서로 정렬" },
   // 카카오·네이버 모두 대중교통 길찾기 REST API를 제공하지 않아 보류 상태.
-  { value: "transit", icon: "🚌", title: "대중교통", desc: "서비스 준비 중", disabled: true },
+  { value: "transit", icon: "버스", title: "대중교통", desc: "서비스 준비 중", disabled: true },
 ];
 
 export default function StepStyle({

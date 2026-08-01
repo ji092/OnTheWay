@@ -317,8 +317,19 @@ a {
   cursor: not-allowed;
 }
 
+/* 그림문자 대신 기호/단위를 담는 원형 배지 */
 .styleIcon {
-  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(79, 142, 247, 0.1);
+  color: #4f8ef7;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .styleTitle {
@@ -460,8 +471,24 @@ a {
   background: rgba(79, 142, 247, 0.08);
 }
 
-.resultIcon {
-  font-size: 20px;
+/* 카테고리를 두 글자로 나타내는 배지 (DT / 주유 / 고급 / WC) */
+.resultBadge {
+  flex-shrink: 0;
+  align-self: flex-start;
+  min-width: 34px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.1);
+  color: #667;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.02em;
+}
+
+.resultCardSelected .resultBadge {
+  background: rgba(79, 142, 247, 0.15);
+  color: #4f8ef7;
 }
 
 .resultBody {
@@ -473,6 +500,13 @@ a {
 .resultName {
   font-size: 15px;
   font-weight: 700;
+}
+
+.resultPrice {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4f8ef7;
+  margin-top: 1px;
 }
 
 .resultMeta {

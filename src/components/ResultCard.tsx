@@ -1,9 +1,10 @@
 import type { Candidate, SortStyle } from "@/lib/types";
 
-const ICON: Record<string, string> = { dt: "🚗", gas: "⛽", restroom: "🚻" };
+/** 그림문자 대신 짧은 글자 배지 — 플랫폼마다 다르게 그려지지 않고 뜻이 분명하다. */
+const BADGE: Record<string, string> = { dt: "DT", gas: "주유", gasPremium: "고급", restroom: "WC" };
 const SIDE_LABEL: Record<Candidate["side"], string> = {
-  SAME: "✓ 같은 방향",
-  OPPOSITE: "⚠ 반대편(유턴)",
+  SAME: "· 같은 방향",
+  OPPOSITE: "△ 반대편(유턴)",
   UNKNOWN: "? 방향 확인 필요",
 };
 
@@ -48,9 +49,12 @@ export default function ResultCard({
 
   return (
     <button className={`resultCard${selected ? " resultCardSelected" : ""}`} onClick={onSelect}>
-      <span className="resultIcon">{ICON[candidate.category ?? ""] ?? "📍"}</span>
+      <span className="resultBadge">{BADGE[candidate.category ?? ""] ?? "장소"}</span>
       <div className="resultBody">
         <div className="resultName">{candidate.name}</div>
+        {candidate.price ? (
+          <div className="resultPrice">고급유 {candidate.price.toLocaleString("ko-KR")}원</div>
+        ) : null}
         <div className="resultMeta">
           이탈 {candidate.distM}m ·{" "}
           <span className={emphasis.time ? "metricStrong" : undefined}>{timeLabel}</span> ·{" "}
