@@ -1,18 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import InstallPrompt from "@/components/InstallPrompt";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+/**
+ * Pretendard 동적 서브셋 — unicode-range로 91개로 쪼개져 있어 실제로 쓰는 글자만 받는다.
+ * 통짜 variable woff2는 2MB라 모바일에서 부담스러워 이 방식을 택했다.
+ * next/font를 못 쓰는 대신 preconnect로 연결 비용을 줄인다.
+ */
+const PRETENDARD_CSS =
+  "https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.min.css";
 
 export const metadata: Metadata = {
   title: "On The Way",
@@ -44,7 +41,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="ko">
+      <head>
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="" />
+        <link rel="stylesheet" href={PRETENDARD_CSS} />
+      </head>
       <body>
         {children}
         <InstallPrompt />

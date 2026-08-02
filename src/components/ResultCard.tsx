@@ -42,13 +42,20 @@ export default function ResultCard({
   const prefix = isApprox ? "약 " : "";
 
   const emphasis = EMPHASIS[sortStyle];
-  const timeLabel = precisionLoading
+  const timeValue = precisionLoading
     ? "계산 중…"
-    : `${prefix}+${minutes < 1 ? "1분 미만" : `${minutes}분`}`;
-  const distLabel = precisionLoading ? "계산 중…" : `${prefix}+${formatDistance(extraDistM)}`;
+    : `+${minutes < 1 ? "1분 미만" : `${minutes}분`}`;
+  const distValue = precisionLoading ? "계산 중…" : `+${formatDistance(extraDistM)}`;
+  // "약"은 값이 아니라 정확도 표시라 강조에서 빼고 흐리게 둔다.
+  const approxMark = precisionLoading || !prefix ? null : <span className="metricApprox">약 </span>;
 
   return (
-    <button className={`resultCard${selected ? " resultCardSelected" : ""}`} onClick={onSelect}>
+    <button
+      type="button"
+      aria-pressed={selected}
+      className={`resultCard${selected ? " resultCardSelected" : ""}`}
+      onClick={onSelect}
+    >
       <span className="resultBadge">{BADGE[candidate.category ?? ""] ?? "장소"}</span>
       <div className="resultBody">
         <div className="resultName">{candidate.name}</div>
@@ -56,9 +63,10 @@ export default function ResultCard({
           <div className="resultPrice">고급유 {candidate.price.toLocaleString("ko-KR")}원</div>
         ) : null}
         <div className="resultMeta">
-          이탈 {candidate.distM}m ·{" "}
-          <span className={emphasis.time ? "metricStrong" : undefined}>{timeLabel}</span> ·{" "}
-          <span className={emphasis.dist ? "metricStrong" : undefined}>{distLabel}</span>
+          이탈 {candidate.distM}m · {approxMark}
+          <span className={emphasis.time ? "metricStrong" : undefined}>{timeValue}</span> ·{" "}
+          {approxMark}
+          <span className={emphasis.dist ? "metricStrong" : undefined}>{distValue}</span>
         </div>
         <div className="resultSide">{SIDE_LABEL[candidate.side]}</div>
       </div>

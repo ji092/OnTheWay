@@ -46,6 +46,7 @@ export default function StepStyle({
         {OPTIONS.map((opt) => (
           <button
             key={opt.value}
+            type="button"
             className="styleCard"
             disabled={opt.disabled}
             onClick={() => !opt.disabled && onSelect(opt.value as SortStyle)}
