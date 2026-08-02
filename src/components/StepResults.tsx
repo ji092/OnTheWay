@@ -15,17 +15,44 @@ import {
 type CategoryFilter = "all" | Category;
 const DEVIATION_OPTIONS = [100, 300, 500] as const;
 
+/**
+ * 경로 어디쯤에서 들를지. "상관없음"이면 앞 화면에서 고른 탐색 방식 순서를 따르고,
+ * 출발지/목적지를 고르면 그 정렬이 우선한다 — 사용자가 방금 누른 조건이 이겨야 한다.
+ */
+type NearBy = "none" | "origin" | "destination";
+const NEARBY_OPTIONS: { value: NearBy; label: string }[] = [
+  { value: "none", label: "상관없음" },
+  { value: "origin", label: "출발지 근처" },
+  { value: "destination", label: "목적지 근처" },
+];
+
+/**
+ * 서버가 응답을 안 주면 화면이 "검색 중…"에서 영원히 멈춘다.
+ * 서버 쪽 외부 호출 예산이 7초라 그보다 넉넉하게 잡되 상한은 둔다.
+ */
+const SEARCH_TIMEOUT_MS = 20_000;
+const EXTRA_TIME_TIMEOUT_MS = 15_000;
+
 /** 실패 시 서버가 준 메시지를 그대로 담아 throw — 빈 결과와 에러를 구분하기 위함 */
 async function fetchCandidates(
   routeId: string,
   query: string,
   category: Category,
 ): Promise<Candidate[]> {
-  const res = await fetch("/api/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ routeId, query, category }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ routeId, query, category }),
+      signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      throw new Error("응답이 너무 늦어 검색을 중단했습니다. 잠시 후 다시 시도해주세요");
+    }
+    throw new Error("네트워크 연결을 확인해주세요");
+  }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     throw new Error(data?.message ?? "검색 중 오류가 발생했습니다");
@@ -56,6 +83,7 @@ async function fetchExtraTime(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ routeId, pois }),
+      signal: AbortSignal.timeout(EXTRA_TIME_TIMEOUT_MS),
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -85,6 +113,7 @@ export default function StepResults({
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [deviation, setDeviation] = useState<number>(500);
   const [excludeUturn, setExcludeUturn] = useState(true);
+  const [nearBy, setNearBy] = useState<NearBy>("none");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -169,11 +198,13 @@ export default function StepResults({
     let list = candidates.filter((c) => c.distM <= deviation);
     if (excludeUturn) list = list.filter((c) => c.side !== "OPPOSITE");
     const sorted = [...list];
-    if (sortStyle === "distance") sorted.sort((a, b) => a.distM - b.distM);
+    if (nearBy === "origin") sorted.sort((a, b) => a.routeProgressM - b.routeProgressM);
+    else if (nearBy === "destination") sorted.sort((a, b) => b.routeProgressM - a.routeProgressM);
+    else if (sortStyle === "distance") sorted.sort((a, b) => a.distM - b.distM);
     else if (sortStyle === "time") sorted.sort((a, b) => a.approxExtraSec - b.approxExtraSec);
     else sorted.sort((a, b) => b.score - a.score);
     return sorted;
-  }, [candidates, deviation, excludeUturn, sortStyle]);
+  }, [candidates, deviation, excludeUturn, sortStyle, nearBy]);
 
   const top3 = filtered.slice(0, TOP_N_PRECISE);
   const top3Key = top3.map((c) => c.placeId).join(",");
@@ -226,7 +257,7 @@ export default function StepResults({
           ← 뒤로
         </button>
         <span className="routeLabel">
-          📍 {origin.name} → {destination.name}
+          1{origin.name} → {destination.name}
         </span>
         <button className="linkBtn" onClick={onNewSearch}>
           ⟳ 새 검색
@@ -237,6 +268,8 @@ export default function StepResults({
         {(Object.keys(CATEGORY_LABEL) as CategoryFilter[]).map((c) => (
           <button
             key={c}
+            type="button"
+            aria-pressed={category === c}
             className={`chip${category === c ? " chipActive" : ""}`}
             onClick={() => setCategory(c)}
           >
@@ -251,6 +284,8 @@ export default function StepResults({
           {DEVIATION_OPTIONS.map((d) => (
             <button
               key={d}
+              type="button"
+              aria-pressed={deviation === d}
               className={`chip${deviation === d ? " chipActive" : ""}`}
               onClick={() => setDeviation(d)}
             >
@@ -258,8 +293,25 @@ export default function StepResults({
             </button>
           ))}
         </div>
+        <div className="filterHeader">들르는 위치</div>
+        <div className="chipRow">
+          {NEARBY_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              aria-pressed={nearBy === opt.value}
+              className={`chip${nearBy === opt.value ? " chipActive" : ""}`}
+              onClick={() => setNearBy(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         <div className="chipRow">
           <button
+            type="button"
+            aria-pressed={excludeUturn}
             className={`chip${excludeUturn ? " chipActive" : ""}`}
             onClick={() => setExcludeUturn((v) => !v)}
           >
@@ -268,12 +320,20 @@ export default function StepResults({
         </div>
       </div>
 
-      <div className="resultsListHeader">경유지 추천 {filtered.length}곳</div>
+      <div className="resultsListHeader" aria-live="polite">
+        경유지 추천 {filtered.length}곳
+      </div>
       <div className="resultsList">
-        {loading && <p className="loadingText">검색 중…</p>}
+        {loading && (
+          <p className="loadingText" role="status">
+            검색 중…
+          </p>
+        )}
         {!loading && searchError && (
           <div className="emptyState">
-            <p className="errorText">{searchError}</p>
+            <p className="errorText" role="alert">
+              {searchError}
+            </p>
             <div className="chipRow">
               <button className="secondaryBtn" onClick={() => setRetryCount((n) => n + 1)}>
                 다시 시도

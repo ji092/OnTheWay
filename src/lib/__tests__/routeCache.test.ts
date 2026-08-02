@@ -27,6 +27,7 @@ const CANDIDATE: Candidate = {
   category: "gas",
   approxExtraSec: 89,
   approxExtraDistM: 240,
+  routeProgressM: 3200,
   score: 88,
 };
 

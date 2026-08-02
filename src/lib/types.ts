@@ -26,6 +26,8 @@ export type Candidate = {
   approxExtraDistM: number;
   /** 고급유(오피넷) 후보만 채워짐 — 원/L. */
   price?: number;
+  /** 출발지에서 경로를 따라 이 지점까지 진행한 거리(m). 출발지/목적지 근처 정렬 기준. */
+  routeProgressM: number;
   score: number;
 };
 

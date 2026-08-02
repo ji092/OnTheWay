@@ -88,6 +88,52 @@ export function sideOfRoute(vertexes: Point[], segIdx: number, px: number, py: n
   return cross > 0 ? "OPPOSITE" : "SAME";
 }
 
+/**
+ * 경로 시작점부터 각 좌표까지 누적 거리(m). 인덱스는 vertexes와 1:1이며 [0]은 0이다.
+ * 후보마다 앞쪽 세그먼트를 다시 더하면 O(후보 x 좌표)라 경로당 한 번만 계산해 재사용한다.
+ */
+export function cumulativeLengths(vertexes: Point[]): number[] {
+  const cum = new Array<number>(vertexes.length).fill(0);
+  for (let i = 0; i < vertexes.length - 1; i++) {
+    const a = vertexes[i];
+    const b = vertexes[i + 1];
+    const pa = toPlane(a.x, a.y, a.y);
+    const pb = toPlane(b.x, b.y, a.y);
+    cum[i + 1] = cum[i] + Math.hypot(pb[0] - pa[0], pb[1] - pa[1]);
+  }
+  return cum;
+}
+
+/**
+ * 출발지에서 이 지점까지 경로를 따라 얼마나 갔는지(m).
+ * "출발지에 가까운 순 / 목적지에 가까운 순" 정렬의 기준값이다.
+ * 최근접 세그먼트 시작점까지의 누적 거리 + 그 세그먼트 위 투영 길이.
+ */
+export function progressAlongRoute(
+  vertexes: Point[],
+  cum: number[],
+  segIdx: number,
+  px: number,
+  py: number,
+): number {
+  if (vertexes.length < 2) return 0;
+  const i = Math.min(Math.max(segIdx, 0), vertexes.length - 2);
+  const a = vertexes[i];
+  const b = vertexes[i + 1];
+  const refY = a.y;
+  const pa = toPlane(a.x, a.y, refY);
+  const pb = toPlane(b.x, b.y, refY);
+  const pp = toPlane(px, py, refY);
+
+  const abx = pb[0] - pa[0];
+  const aby = pb[1] - pa[1];
+  const abLen2 = abx * abx + aby * aby;
+  if (abLen2 === 0) return cum[i];
+
+  const t = Math.max(0, Math.min(1, ((pp[0] - pa[0]) * abx + (pp[1] - pa[1]) * aby) / abLen2));
+  return cum[i] + t * Math.sqrt(abLen2);
+}
+
 export function sampleRoute(vertexes: Point[], gapM: number): Point[] {
   if (vertexes.length === 0) return [];
   const samples: Point[] = [vertexes[0]];
