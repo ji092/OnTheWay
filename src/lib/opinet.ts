@@ -6,7 +6,8 @@
  * 오피넷 반경 검색은 제품코드로 필터링되므로 고급유 취급 주유소만 정확히 받아올 수 있고,
  * 판매가격까지 함께 온다.
  */
-import { consumeOpinetQuota } from "./quota";
+import { consumeOpinetQuota, QuotaExceededError } from "./quota";
+import { fetchWithTimeout, isNetworkError, TIMEOUT, TimeoutError, withRetry } from "./http";
 import { wgs84ToKatec, katecToWgs84, isInKorea } from "./coord";
 import type { Point } from "./types";
 
@@ -29,6 +30,14 @@ export class OpinetApiError extends Error {
 }
 
 export const callCount = { around: 0 };
+
+/** 카카오 클라이언트와 같은 기준 — 일시적 오류만 재시도한다. */
+function isRetriable(err: unknown): boolean {
+  if (err instanceof QuotaExceededError) return false;
+  if (err instanceof TimeoutError) return true;
+  if (err instanceof OpinetApiError) return err.status >= 500 || err.status === 429;
+  return isNetworkError(err);
+}
 
 export type Station = {
   /** 오피넷 주유소 코드 */
@@ -107,16 +116,25 @@ export async function stationsAround(
     sort: "2", // 거리순
   });
 
-  consumeOpinetQuota();
-  callCount.around++;
+  return withRetry(
+    async () => {
+      consumeOpinetQuota(); // 재시도도 예산을 소모하므로 시도마다 차감
+      callCount.around++;
 
-  const res = await fetch(`${AROUND_URL}?${params.toString()}`);
-  if (!res.ok) {
-    const body = await res.text();
-    throw new OpinetApiError(res.status, `${res.status} ${body.slice(0, 200)}`);
-  }
+      const res = await fetchWithTimeout(
+        `${AROUND_URL}?${params.toString()}`,
+        {},
+        TIMEOUT.slow,
+      );
+      if (!res.ok) {
+        const body = await res.text();
+        throw new OpinetApiError(res.status, `${res.status} ${body.slice(0, 200)}`);
+      }
 
-  const data = (await res.json()) as AroundResponse;
-  const raw = data.RESULT?.OIL ?? [];
-  return raw.map(toStation).filter((s): s is Station => s !== null);
+      const data = (await res.json()) as AroundResponse;
+      const raw = data.RESULT?.OIL ?? [];
+      return raw.map(toStation).filter((s): s is Station => s !== null);
+    },
+    { isRetriable },
+  );
 }

@@ -35,7 +35,10 @@ export default function PlaceInput({
     }
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/place-search?q=${encodeURIComponent(v)}`);
+        const res = await fetch(`/api/place-search?q=${encodeURIComponent(v)}`, {
+          // 자동완성이 응답을 안 주면 다음 입력까지 매달린다.
+          signal: AbortSignal.timeout(8000),
+        });
         if (!res.ok) throw new Error(`place-search ${res.status}`);
         const data = await res.json();
         setOptions(data.places ?? []);

@@ -18,6 +18,8 @@ import {
 
 type Body = { routeId: string; query: string; category?: Category };
 
+const MAX_QUERY_LENGTH = 50;
+
 export async function POST(req: NextRequest) {
   const rate = checkRateLimit(req, "search");
   if (!rate.ok) {
@@ -34,9 +36,18 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  // 검색어는 그대로 카카오로 전달되므로 길이를 제한한다.
+  if (body.query.length > MAX_QUERY_LENGTH) {
+    return NextResponse.json(
+      { error: "E-900", message: `query must be ${MAX_QUERY_LENGTH} characters or fewer` },
+      { status: 400 },
+    );
+  }
 
+  // 좌표가 2개 미만이면 점-선분 거리 자체가 성립하지 않아 전부 걸러진다.
+  // 빈 결과로 조용히 넘기지 않고 경로를 다시 받게 한다.
   const route = getCachedRoute(body.routeId);
-  if (!route) {
+  if (!route || route.vertexes.length < 2) {
     return NextResponse.json(ROUTE_EXPIRED_BODY, { status: ROUTE_EXPIRED_STATUS });
   }
 

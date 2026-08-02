@@ -40,7 +40,17 @@ export async function POST(req: NextRequest) {
 
   const origin = route.vertexes[0];
   const destination = route.vertexes[route.vertexes.length - 1];
-  const pois = body.pois.slice(0, MAX_POIS);
+  // 좌표가 숫자가 아니면 NaN이 그대로 외부 API로 나가 쿼터만 태운다.
+  const pois = body.pois
+    .filter((p) => p && typeof p.placeId === "string" && isFinite(p.x) && isFinite(p.y))
+    .slice(0, MAX_POIS);
+
+  if (pois.length === 0) {
+    return NextResponse.json(
+      { error: "E-900", message: "pois[] must contain {placeId, x, y}" },
+      { status: 400 },
+    );
+  }
 
   const results = await Promise.all(
     pois.map(async (poi) => {

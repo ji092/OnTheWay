@@ -16,12 +16,21 @@ type Platform = "hidden" | "ios" | "other";
 const subscribe = () => () => {};
 const getServerPlatform = (): Platform => "hidden";
 
+/** 쿠키 차단·시크릿 모드에서는 localStorage 접근 자체가 예외를 던진다. */
+function readDismissed(): boolean {
+  try {
+    return localStorage.getItem(DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function getPlatform(): Platform {
   const standalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     // iOS Safari reports installed apps here instead of via display-mode.
     (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  if (standalone || localStorage.getItem(DISMISS_KEY) === "1") return "hidden";
+  if (standalone || readDismissed()) return "hidden";
   return /iPad|iPhone|iPod/.test(navigator.userAgent) ? "ios" : "other";
 }
 
@@ -55,7 +64,12 @@ export default function InstallPrompt() {
   if (!visible) return null;
 
   const dismiss = () => {
-    localStorage.setItem(DISMISS_KEY, "1");
+    // 저장에 실패해도 이번 세션에서는 닫힌 상태를 유지한다.
+    try {
+      localStorage.setItem(DISMISS_KEY, "1");
+    } catch {
+      /* 저장 불가 환경 — 무시 */
+    }
     setClosed(true);
   };
 

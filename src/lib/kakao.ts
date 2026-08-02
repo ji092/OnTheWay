@@ -6,6 +6,7 @@
 
 import type { Point } from "./types";
 import { consumeQuota, QuotaExceededError } from "./quota";
+import { fetchWithTimeout, isNetworkError, TIMEOUT, TimeoutError, withRetry } from "./http";
 
 const LOCAL_KEYWORD_URL = "https://dapi.kakao.com/v2/local/search/keyword.json";
 const DIRECTIONS_URL = "https://apis-navi.kakaomobility.com/v1/directions";
@@ -36,30 +37,19 @@ export class NoRouteError extends Error {}
  */
 export const callCounts = { local: 0, directions: 0, waypoints: 0 };
 
-const MAX_ATTEMPTS = 3;
-const BASE_DELAY_MS = 500;
-
+/**
+ * 재시도할 가치가 있는 오류만 골라낸다.
+ * - 예산 초과: 호출 자체를 안 한 것이므로 즉시 포기
+ * - 타임아웃 / 네트워크 실패: 일시적일 수 있으므로 재시도
+ * - 5xx, 429(카카오 쪽 스로틀): 재시도
+ * - 그 외 4xx: 요청이 잘못된 것이라 다시 보내도 같은 결과
+ * - 그 밖의 예외(우리 코드 버그, 응답 파싱 실패): 재시도해도 같은 지점에서 깨짐
+ */
 function isRetriable(err: unknown): boolean {
-  // 예산 초과는 재시도할수록 상황만 나빠진다 — 애초에 호출을 안 한 것이므로 즉시 포기.
   if (err instanceof QuotaExceededError) return false;
-  // 네트워크 자체 실패(TypeError 등)나 5xx만 재시도 — 4xx(요청 자체가 잘못됨)는 재시도해도 똑같이 실패함
-  if (err instanceof KakaoApiError) return err.status >= 500;
-  return true;
-}
-
-/** 일시적 오류(네트워크 실패/5xx)만 지수 백오프로 재시도. 4xx는 즉시 실패시킴. */
-async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      if (attempt === MAX_ATTEMPTS || !isRetriable(err)) throw err;
-      await new Promise((resolve) => setTimeout(resolve, BASE_DELAY_MS * 2 ** (attempt - 1)));
-    }
-  }
-  throw lastErr;
+  if (err instanceof TimeoutError) return true;
+  if (err instanceof KakaoApiError) return err.status >= 500 || err.status === 429;
+  return isNetworkError(err);
 }
 
 async function kakaoGet(
@@ -71,13 +61,13 @@ async function kakaoGet(
   return withRetry(async () => {
     consumeQuota(); // 재시도도 쿼터를 소모하므로 시도마다 차감
     callCounts[kind]++;
-    const res = await fetch(`${url}?${qs}`, { headers: authHeaders() });
+    const res = await fetchWithTimeout(`${url}?${qs}`, { headers: authHeaders() }, TIMEOUT.standard);
     if (!res.ok) {
       const body = await res.text();
       throw new KakaoApiError(res.status, `${res.status} ${body.slice(0, 300)}`);
     }
     return res.json();
-  });
+  }, { isRetriable });
 }
 
 /** 다중 경유지 API 전용 — GET이 아니라 POST + JSON body 필요 (단일 목적지 Directions와 다름). */
@@ -89,17 +79,21 @@ async function kakaoPost(
   return withRetry(async () => {
     consumeQuota();
     callCounts[kind]++;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      TIMEOUT.slow,
+    );
     if (!res.ok) {
       const text = await res.text();
       throw new KakaoApiError(res.status, `${res.status} ${text.slice(0, 300)}`);
     }
     return res.json();
-  });
+  }, { isRetriable });
 }
 
 /** 경로 기반 POI 수집용 — sort=distance 필수 (SPEC §10-D4). 지명 자동완성에는 쓰지 말 것. */
