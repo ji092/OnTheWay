@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 같은 경로·같은 키워드면 카카오를 다시 때리지 않는다 (카테고리 탭 왕복 대응).
-  const cached = getCachedSearch(body.routeId, body.query);
+  const cached = getCachedSearch(body.routeId, body.query, body.category);
   if (cached) {
     return NextResponse.json({ candidates: cached, cached: true });
   }
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       body.category === "gasPremium"
         ? await searchPremiumGasAlongRoute(route.vertexes)
         : await searchAlongRoute(route.vertexes, body.query, body.category);
-    setCachedSearch(body.routeId, body.query, candidates);
+    setCachedSearch(body.routeId, body.query, candidates, body.category);
     return NextResponse.json({ candidates });
   } catch (err) {
     if (err instanceof QuotaExceededError) {
@@ -75,6 +75,12 @@ export async function POST(req: NextRequest) {
         { status: 502 },
       );
     }
-    throw err;
+    // 여기까지 온 건 우리 쪽 버그 — 외부 API 실패로 위장하면 원인을 못 찾는다.
+    // 다시 던지면 플랫폼 기본 500이 나가 오류 코드도 로그도 남지 않는다.
+    console.error("[/api/search] 예기치 못한 오류", err);
+    return NextResponse.json(
+      { error: "E-202", message: "검색 중 오류가 발생했습니다" },
+      { status: 500 },
+    );
   }
 }

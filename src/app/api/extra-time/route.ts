@@ -65,10 +65,15 @@ export async function POST(req: NextRequest) {
           extraDistM: Math.max(0, detour.distanceM - route.distanceM),
           approx: false,
         };
-      } catch {
+      } catch (err) {
         // 실패 시 근사치 유지 플래그만 세우고 나머지는 프론트가 기존 근사값 사용 (FS-4).
         // 일일 예산 초과(QuotaExceededError)도 여기로 흡수된다 — 정밀 시간은 보조
         // 기능이라 화면을 막는 것보다 근사치로 계속 보여주는 편이 낫다.
+        //
+        // 다만 조용히 삼키면 예산 초과인지 우리 쪽 버그인지 구분할 수 없다.
+        // 응답은 그대로 두고 원인만 서버 로그에 남긴다.
+        const name = err instanceof Error ? err.name : typeof err;
+        console.warn(`[/api/extra-time] ${poi.placeId} 정밀 계산 실패(${name}) — 근사치로 폴백`, err);
         return { placeId: poi.placeId, extraSec: null, extraDistM: null, approx: true };
       }
     }),

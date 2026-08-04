@@ -22,6 +22,11 @@ export const RATE_LIMITS = {
   placeSearch: { limit: 40, windowMs: 60_000 },
   route: { limit: 15, windowMs: 60_000 },
   extraTime: { limit: 30, windowMs: 60_000 },
+  /**
+   * 외부 API를 부르지 않아 쿼터와는 무관하지만, 호출 계측·예산 잔량을 공개하므로
+   * 긁어가기 좋은 표적이다. 진단용으로 쓰기엔 넉넉하고 수집당하기엔 성가신 선.
+   */
+  health: { limit: 30, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**
