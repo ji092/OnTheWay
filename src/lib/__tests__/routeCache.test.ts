@@ -56,6 +56,15 @@ describe("검색 결과 캐시", () => {
     expect(getCachedSearch("다른경로", "주유소")).toBeUndefined();
   });
 
+  // 고급유만 출처가 오피넷이라, query가 같아도 category가 다르면 결과가 다르다.
+  it("query가 같아도 category가 다르면 분리된다", () => {
+    setCachedSearch("r4", "주유소", [CANDIDATE], "gas");
+
+    expect(getCachedSearch("r4", "주유소", "gas")).toEqual([CANDIDATE]);
+    expect(getCachedSearch("r4", "주유소", "gasPremium")).toBeUndefined();
+    expect(getCachedSearch("r4", "주유소")).toBeUndefined();
+  });
+
   it("경로 캐시 키와 충돌하지 않는다", () => {
     setCachedRoute("r3", ROUTE);
     setCachedSearch("r3", "드라이브스루", [CANDIDATE]);
