@@ -4,7 +4,8 @@
  * /route/car + *ecoords(정확좌표) 사용 — iOS 실기기에서 경유지가 추가 안 되는 문제
  * 리포트(2026-07-30) 대응. 네이버 공식 예시가 경유지 케이스에서 /route/car +
  * decoords/v1ecoords를 쓰는 걸 확인해 전환 — 좌표 대신 이름으로 재검색하다 실패해
- * 경유지가 조용히 빠지는 시나리오를 막기 위함. 재배포 후 실기기 재검증 필요.
+ * 경유지가 조용히 빠지는 시나리오를 막기 위함. 재배포 후 iOS·안드로이드 실기기에서
+ * 경유지가 채워진 채 열리는 것 확인함(2026-08-04).
  */
 
 export type NaverWaypoint = { lat: number; lng: number; name: string };
