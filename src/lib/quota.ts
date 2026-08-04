@@ -71,7 +71,6 @@ export const resetQuota = kakao.reset;
 
 export const consumeOpinetQuota = opinet.consume;
 export const opinetQuotaStatus = opinet.status;
-export const resetOpinetQuota = opinet.reset;
 
 export const QUOTA_EXCEEDED_BODY = {
   error: "E-902",
