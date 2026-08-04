@@ -2,6 +2,7 @@
 import { useState } from "react";
 import PlaceInput from "./PlaceInput";
 import KakaoMap from "./KakaoMap";
+import { requestRoute } from "@/lib/routeClient";
 import type { Place, Point } from "@/lib/types";
 
 export default function StepHome({
@@ -30,22 +31,10 @@ export default function StepHome({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/route", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          origin: { x: origin.x, y: origin.y },
-          destination: { x: destination.x, y: destination.y },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.message ?? "경로를 찾을 수 없습니다");
-        return;
-      }
-      onRouteFound(origin, destination, data.routeId, data.vertexes);
-    } catch {
-      setError("네트워크 오류가 발생했습니다");
+      const { routeId, vertexes } = await requestRoute(origin, destination);
+      onRouteFound(origin, destination, routeId, vertexes);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "경로를 찾을 수 없습니다");
     } finally {
       setLoading(false);
     }

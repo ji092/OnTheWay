@@ -33,6 +33,12 @@ const NEARBY_OPTIONS: { value: NearBy; label: string }[] = [
 const SEARCH_TIMEOUT_MS = 20_000;
 const EXTRA_TIME_TIMEOUT_MS = 15_000;
 
+/**
+ * 경로 캐시 만료(E-204). 사용자 잘못이 아니라 서버 인메모리 캐시의 수명 문제라
+ * 오류로 띄우지 않고 경로만 다시 받아 이어서 검색한다.
+ */
+class RouteExpiredError extends Error {}
+
 /** 실패 시 서버가 준 메시지를 그대로 담아 throw — 빈 결과와 에러를 구분하기 위함 */
 async function fetchCandidates(
   routeId: string,
@@ -54,6 +60,9 @@ async function fetchCandidates(
     throw new Error("네트워크 연결을 확인해주세요");
   }
   const data = await res.json().catch(() => null);
+  if (res.status === 410) {
+    throw new RouteExpiredError(data?.message ?? "경로 정보가 만료되었어요");
+  }
   if (!res.ok) {
     throw new Error(data?.message ?? "검색 중 오류가 발생했습니다");
   }
@@ -100,6 +109,7 @@ export default function StepResults({
   origin,
   destination,
   sortStyle,
+  onRouteExpired,
   onNewSearch,
   onBackToStyle,
 }: {
@@ -107,6 +117,8 @@ export default function StepResults({
   origin: Place;
   destination: Place;
   sortStyle: SortStyle;
+  /** 경로 재조회를 상위에 요청한다. 성공하면 새 routeId가 prop으로 내려와 검색이 다시 돈다. */
+  onRouteExpired: () => Promise<boolean>;
   onNewSearch: () => void;
   onBackToStyle: () => void;
 }) {
@@ -150,6 +162,9 @@ export default function StepResults({
       setLoading(true);
       setSearchError(null);
       setSelectedId(null);
+      // 경로 만료를 복구했으면 새 routeId로 effect가 다시 돈다. 그 사이 로딩 표시를
+      // 껐다 켜면 화면이 한 번 깜빡이므로 켠 채로 넘긴다.
+      let keepLoading = false;
       try {
         let results: Candidate[];
         if (category === "all") {
@@ -181,17 +196,31 @@ export default function StepResults({
           setCandidates(results);
         }
       } catch (err) {
-        if (!cancelled) {
+        if (cancelled) return;
+        // 경로 만료는 사용자에게 보여줄 오류가 아니라 복구 절차다.
+        // 재조회에 성공하면 새 routeId로 이 effect가 다시 돌면서 검색이 이어진다.
+        if (err instanceof RouteExpiredError) {
+          const recovered = await onRouteExpired();
+          if (cancelled) return;
+          if (recovered) {
+            keepLoading = true; // 새 routeId로 이 effect가 곧 다시 돈다
+            return;
+          }
           setCandidates([]);
-          setSearchError(err instanceof Error ? err.message : "검색 중 오류가 발생했습니다");
+          setSearchError("경로 정보가 만료되었어요. 새 검색으로 다시 시도해주세요");
+          return;
         }
+        setCandidates([]);
+        setSearchError(err instanceof Error ? err.message : "검색 중 오류가 발생했습니다");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !keepLoading) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
+    // onRouteExpired는 매 렌더 새 참조라 의존성에서 제외 — 넣으면 검색이 무한 재실행된다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeId, category, retryCount]);
 
   const filtered = useMemo(() => {
