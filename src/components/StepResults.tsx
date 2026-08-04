@@ -257,7 +257,7 @@ export default function StepResults({
           ← 뒤로
         </button>
         <span className="routeLabel">
-          1{origin.name} → {destination.name}
+          {origin.name} → {destination.name}
         </span>
         <button className="linkBtn" onClick={onNewSearch}>
           ⟳ 새 검색
