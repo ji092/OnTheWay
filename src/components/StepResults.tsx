@@ -37,7 +37,7 @@ const EXTRA_TIME_TIMEOUT_MS = 15_000;
  * 경로 캐시 만료(E-204). 사용자 잘못이 아니라 서버 인메모리 캐시의 수명 문제라
  * 오류로 띄우지 않고 경로만 다시 받아 이어서 검색한다.
  */
-class RouteExpiredError extends Error {}
+class RouteExpiredError extends Error { }
 
 /** 실패 시 서버가 준 메시지를 그대로 담아 throw — 빈 결과와 에러를 구분하기 위함 */
 async function fetchCandidates(
@@ -322,7 +322,7 @@ export default function StepResults({
             </button>
           ))}
         </div>
-        <div className="filterHeader">들르는 위치</div>
+        <div className="filterHeader">경유 위치</div>
         <div className="chipRow">
           {NEARBY_OPTIONS.map((opt) => (
             <button
